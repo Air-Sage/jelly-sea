@@ -1,0 +1,762 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>果冻冰海 · Jelly Arctic</title>
+<style>
+  :root{
+    --ink:#1b2333; --ink2:#5b6577; --line:rgba(27,35,51,.16);
+    --card:rgba(255,255,255,.62); --accent:#1b2333; --accentInk:#fff;
+  }
+  body.night{
+    --ink:#eef3ff; --ink2:#9fb0d0; --line:rgba(238,243,255,.2);
+    --card:rgba(16,26,52,.55); --accent:#eef3ff; --accentInk:#0c1530;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:#dfe3ea;color:var(--ink);
+    font-family:-apple-system,"PingFang SC","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased}
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+  canvas.busy{cursor:grabbing}
+  .ui{position:fixed;pointer-events:none;transition:color .6s}
+  .ui>*{pointer-events:auto}
+  #head{left:28px;top:22px;max-width:300px}
+  #head .kicker,.label{font:600 10px/1 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)}
+  #head h1{margin:10px 0 8px;font:italic 400 44px/1 "Songti SC","Noto Serif SC",Georgia,serif;letter-spacing:.02em}
+  #head p{margin:0;font-size:13px;line-height:1.7;color:var(--ink2)}
+  #panel{right:22px;top:22px;width:228px;padding:14px;border-radius:14px;background:var(--card);
+    border:1px solid var(--line);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);transition:background .6s,border-color .6s}
+  .row{margin-top:12px}
+  .row:first-child{margin-top:0}
+  .seg{display:flex;margin-top:7px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg button{flex:1;border:0;border-left:1px solid var(--line);background:none;color:var(--ink);font-size:12px;padding:7px 0;cursor:pointer}
+  .seg button:first-child{border-left:0}
+  .seg button.on{background:var(--accent);color:var(--accentInk)}
+  .sl{display:flex;justify-content:space-between;align-items:baseline}
+  .sl output{font:11px ui-monospace,Menlo,monospace;color:var(--ink2)}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:18px;margin:4px 0 0;background:none}
+  input[type=range]::-webkit-slider-runnable-track{height:1px;background:var(--ink2)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;margin-top:-6px;border-radius:50%;background:var(--card);border:1.5px solid var(--ink)}
+  input[type=range]::-moz-range-track{height:1px;background:var(--ink2)}
+  input[type=range]::-moz-range-thumb{width:10px;height:10px;border-radius:50%;background:var(--card);border:1.5px solid var(--ink)}
+  .btn{width:100%;border:1px solid var(--line);background:none;color:var(--ink);border-radius:8px;padding:8px 0;font-size:12px;cursor:pointer}
+  .btn.main{background:var(--accent);color:var(--accentInk);border-color:transparent}
+  .btn:active{transform:translateY(1px)}
+  .btns{display:flex;gap:6px;margin-top:6px}
+  #foot{left:28px;bottom:22px;max-width:520px}
+  #foot p{margin:8px 0 12px;font-size:13px;color:var(--ink2);line-height:1.6}
+  #stats{display:flex;gap:26px}
+  #stats b{display:block;margin-top:6px;font:italic 400 17px "Songti SC","Noto Serif SC",Georgia,serif}
+  @media (max-width:720px){
+    #head{left:16px;top:14px;max-width:60vw} #head h1{font-size:30px} #head p{display:none}
+    #panel{right:12px;left:12px;top:auto;bottom:12px;width:auto;padding:12px}
+    #foot{left:16px;bottom:auto;top:96px} #foot p{display:none} #stats{gap:16px}
+    .hideS{display:none}
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div class="ui" id="head">
+  <div class="kicker">Jelly Arctic · No. 01</div>
+  <h1>果冻冰海</h1>
+  <p>一小块极地的海，冻在一方透明果冻里。<br>按一下水面 —— 它会回应你。</p>
+</div>
+
+<div class="ui" id="panel">
+  <div class="row">
+    <div class="label">天气</div>
+    <div class="seg" id="weather">
+      <button data-w="day" class="on">白昼</button><button data-w="snow">飘雪</button><button data-w="aurora">极光</button>
+    </div>
+  </div>
+  <div class="row hideS">
+    <div class="sl"><span class="label">果冻软度</span><output id="oJelly"></output></div>
+    <input id="sJelly" type="range" min="0" max="1" step="0.01" value="0.5">
+  </div>
+  <div class="row hideS">
+    <div class="sl"><span class="label">波浪阻尼</span><output id="oDamp"></output></div>
+    <input id="sDamp" type="range" min="0" max="1" step="0.01" value="0.3">
+  </div>
+  <div class="row hideS">
+    <div class="sl"><span class="label">潮位</span><output id="oTide"></output></div>
+    <input id="sTide" type="range" min="1.5" max="2.6" step="0.01" value="2.1">
+  </div>
+  <div class="row">
+    <button class="btn main" id="bWhale">呼唤鲸鱼</button>
+    <div class="btns">
+      <button class="btn" id="bPause">暂停</button>
+      <button class="btn" id="bReset">重置</button>
+      <button class="btn" id="bCam">视角</button>
+    </div>
+  </div>
+</div>
+
+<div class="ui" id="foot">
+  <div class="label">玩法</div>
+  <p>在水面按住拖动划出波纹 · 拖走皮划艇 · 抓住侧面拉扯果冻 · 轻敲玻璃 · 空白处拖动旋转，滚轮缩放</p>
+  <div id="stats">
+    <div><span class="label">皮划艇</span><b id="stKayak">漂流</b></div>
+    <div><span class="label">鲸鱼</span><b id="stWhale">巡游</b></div>
+    <div><span class="label">浪高</span><b id="stSwell">0 mm</b></div>
+  </div>
+</div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+/* ───────────── 基础尺寸 ───────────── */
+const W = 12, D = 8;                 // 果冻块的长、宽
+const NX = 121, NZ = 81, CS = W / (NX - 1);   // 水面网格
+const N = NX * NZ;
+const ISLE = { x: -2.2, z: -1.4, r: 1.32 };   // 小岛在水面处的占位圆
+const WH = { cx: 1.6, cz: 0.9, rx: 3.2, rz: 2.2 }; // 鲸鱼巡游椭圆
+
+const P = { level: 2.1, soft: 0.5, damp: 0.3, paused: false, weather: 'day' };
+
+/* ───────────── 渲染器 / 场景 / 相机 ───────────── */
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(30, 1, 0.5, 200);
+const cam = { az: 0.62, pol: 0.98, dist: 27, taz: 0.62, tpol: 0.98, tdist: 27 };
+const camTarget = new THREE.Vector3(0, 0.9, 0);
+const CAM_PRESETS = [[0.62, 0.98, 27], [-0.75, 0.8, 25], [0.15, 1.32, 24], [1.9, 0.55, 30]];
+let camPreset = 0;
+
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize); resize();
+
+function updateCamera(dt) {
+  const k = 1 - Math.exp(-dt * 6);
+  cam.az += (cam.taz - cam.az) * k; cam.pol += (cam.tpol - cam.pol) * k; cam.dist += (cam.tdist - cam.dist) * k;
+  const d = cam.dist * Math.max(1, 1.45 / camera.aspect);
+  camera.position.set(
+    camTarget.x + d * Math.sin(cam.pol) * Math.sin(cam.az),
+    camTarget.y + d * Math.cos(cam.pol),
+    camTarget.z + d * Math.sin(cam.pol) * Math.cos(cam.az));
+  camera.lookAt(camTarget);
+}
+
+/* ───────────── 背景：渐变 + 星空 + 极光（全屏着色器） ───────────── */
+const bgMat = new THREE.ShaderMaterial({
+  depthTest: false, depthWrite: false,
+  uniforms: { cA: { value: new THREE.Color(0xeef0f4) }, cB: { value: new THREE.Color(0xb9bfcb) }, uAur: { value: 0 }, uTime: { value: 0 }, uAspect: { value: 1 } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.999,1.0); }`,
+  fragmentShader: `
+    uniform vec3 cA,cB; uniform float uAur,uTime,uAspect; varying vec2 vUv;
+    float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+    float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+      return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
+    void main(){
+      vec2 p=vUv; float d=distance(vec2((p.x-.5)*min(uAspect,1.6),p.y),vec2(0.,.5));
+      vec3 col=mix(cA,cB,smoothstep(.05,.9,d));
+      if(uAur>0.001){
+        vec2 sp=p*vec2(150.*uAspect,150.); vec2 g=floor(sp);
+        float s=step(.994,hash(g))*smoothstep(.32,.05,length(fract(sp)-.5))*(.55+.45*sin(uTime*2.+hash(g+7.)*40.));
+        col+=vec3(s)*uAur*.9;
+        float x=p.x*3.+noise(vec2(p.x*2.,uTime*.07))*1.6;
+        float band=.50+.13*sin(x*1.25+uTime*.13)+.07*noise(vec2(x*2.,uTime*.2));
+        float t=p.y-band;
+        float a=smoothstep(-.03,.03,t)*smoothstep(.42,.0,t);
+        float rays=.45+.55*noise(vec2(x*13.,uTime*.35));
+        vec3 ac=mix(vec3(.12,1.,.55),vec3(.45,.3,1.),smoothstep(.02,.34,t));
+        col+=ac*a*rays*uAur*.8;
+      }
+      gl_FragColor=vec4(col,1.);
+      #include <colorspace_fragment>
+    }`
+});
+const bg = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), bgMat);
+bg.frustumCulled = false; bg.renderOrder = -100; scene.add(bg);
+
+/* ───────────── 灯光 ───────────── */
+const hemi = new THREE.HemisphereLight(0xffffff, 0xaab4c8, 1.5);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffffff, 2.6);
+sun.position.set(7, 15, 8); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -11, right: 11, top: 11, bottom: -11, near: 1, far: 45 });
+sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.03; sun.shadow.radius = 5;
+scene.add(sun);
+const iglooLight = new THREE.PointLight(0xffa24a, 0, 7, 1.6);
+
+// 给水面一点可反射的环境
+const pm = new THREE.PMREMGenerator(renderer);
+const envScene = new THREE.Scene(); envScene.background = new THREE.Color(0x9fb4d6);
+{
+  const m = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const top = new THREE.Mesh(new THREE.BoxGeometry(14, 0.5, 14), m); top.position.y = 9; envScene.add(top);
+  const s1 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 6, 10), m); s1.position.set(10, 3, 0); envScene.add(s1);
+  const fl = new THREE.Mesh(new THREE.BoxGeometry(30, 0.5, 30), new THREE.MeshBasicMaterial({ color: 0x4d6da8 })); fl.position.y = -6; envScene.add(fl);
+}
+const envTex = pm.fromScene(envScene, 0.035).texture;
+
+/* ───────────── 地面阴影 + 果冻底座 ───────────── */
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), new THREE.ShadowMaterial({ opacity: 0.2 }));
+ground.rotation.x = -Math.PI / 2; ground.position.y = -0.76; ground.receiveShadow = true; scene.add(ground);
+
+function roundedSlab(w, d, r, t) {
+  const s = new THREE.Shape(), x = -w / 2, y = -d / 2;
+  s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r);
+  s.lineTo(x + w, y + d - r); s.quadraticCurveTo(x + w, y + d, x + w - r, y + d);
+  s.lineTo(x + r, y + d); s.quadraticCurveTo(x, y + d, x, y + d - r);
+  s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y);
+  const g = new THREE.ExtrudeGeometry(s, { depth: t - 0.08, bevelEnabled: true, bevelSize: 0.04, bevelThickness: 0.04, bevelSegments: 3, curveSegments: 8 });
+  g.rotateX(-Math.PI / 2); g.translate(0, 0.04, 0);
+  return g;
+}
+[0xd6cdf7, 0xbfe6f6, 0xdcd4fa].forEach((c, i) => {
+  const m = new THREE.Mesh(roundedSlab(W + 0.9, D + 0.9, 0.4, 0.25),
+    new THREE.MeshStandardMaterial({ color: c, roughness: 0.55 }));
+  m.position.y = -0.75 + i * 0.25; m.castShadow = m.receiveShadow = true; scene.add(m);
+});
+
+/* ───────────── 果冻组：整块做剪切 + 挤压形变 ───────────── */
+const jelly = new THREE.Group(); jelly.matrixAutoUpdate = false; scene.add(jelly);
+const J = { sx: 0, sz: 0, vx: 0, vz: 0, q: 0, vq: 0, tx: 0, tz: 0, held: false, ax: 0, az: 0 };
+
+/* ───────────── 水面高度场（二维波动方程） ───────────── */
+const h = new Float32Array(N), v = new Float32Array(N), mask = new Uint8Array(N);
+const gx = i => -W / 2 + i * CS, gz = j => -D / 2 + j * CS;
+for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++)
+  if (Math.hypot(gx(i) - ISLE.x, gz(j) - ISLE.z) < ISLE.r - 0.08) mask[i + j * NX] = 1;
+
+function stepWaves(damp) {
+  const C2 = 0.24;
+  for (let j = 0; j < NZ; j++) {
+    const row = j * NX;
+    for (let i = 0; i < NX; i++) {
+      const k = row + i; if (mask[k]) continue;
+      const c = h[k];
+      // 玻璃壁和小岛都是反射边界（邻居取自身 → 零梯度）
+      const l = i > 0 && !mask[k - 1] ? h[k - 1] : c;
+      const r = i < NX - 1 && !mask[k + 1] ? h[k + 1] : c;
+      const u = j > 0 && !mask[k - NX] ? h[k - NX] : c;
+      const d = j < NZ - 1 && !mask[k + NX] ? h[k + NX] : c;
+      v[k] += (l + r + u + d - 4 * c) * C2;
+    }
+  }
+  let mean = 0, cnt = 0;
+  for (let k = 0; k < N; k++) { if (mask[k]) continue; v[k] *= damp; h[k] += v[k]; mean += h[k]; cnt++; }
+  mean /= cnt;
+  for (let k = 0; k < N; k++) if (!mask[k]) h[k] -= mean * 0.05;   // 体积守恒，防止水面整体漂移
+}
+function addDrop(x, z, rad, amp) {
+  const i0 = Math.max(0, Math.floor((x - rad * 2 + W / 2) / CS)), i1 = Math.min(NX - 1, Math.ceil((x + rad * 2 + W / 2) / CS));
+  const j0 = Math.max(0, Math.floor((z - rad * 2 + D / 2) / CS)), j1 = Math.min(NZ - 1, Math.ceil((z + rad * 2 + D / 2) / CS));
+  const inv = 1 / (rad * rad);
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+    const k = i + j * NX; if (mask[k]) continue;
+    const dx = gx(i) - x, dz = gz(j) - z;
+    h[k] += amp * Math.exp(-(dx * dx + dz * dz) * inv);
+  }
+}
+function sampleH(x, z) {
+  const fx = Math.min(NX - 1.001, Math.max(0, (x + W / 2) / CS)), fz = Math.min(NZ - 1.001, Math.max(0, (z + D / 2) / CS));
+  const i = fx | 0, j = fz | 0, a = fx - i, b = fz - j, k = i + j * NX;
+  return (h[k] * (1 - a) + h[k + 1] * a) * (1 - b) + (h[k + NX] * (1 - a) + h[k + NX + 1] * a) * b;
+}
+const _g = [0, 0];
+function sampleGrad(x, z) {
+  const e = CS * 1.5;
+  _g[0] = (sampleH(x + e, z) - sampleH(x - e, z)) / (2 * e);
+  _g[1] = (sampleH(x, z + e) - sampleH(x, z - e)) / (2 * e);
+  return _g;
+}
+
+/* ───────────── 水体网格：顶面 + 四壁 + 轮廓线 + 海床 ───────────── */
+const gridIndex = [];
+for (let j = 0; j < NZ - 1; j++) for (let i = 0; i < NX - 1; i++) {
+  const a = i + j * NX, b = a + 1, c = a + NX, d = c + 1; gridIndex.push(a, c, b, b, c, d);
+}
+const topGeo = new THREE.BufferGeometry();
+const topPos = new Float32Array(N * 3), topNor = new Float32Array(N * 3);
+for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) { const k = (i + j * NX) * 3; topPos[k] = gx(i); topPos[k + 2] = gz(j); topNor[k + 1] = 1; }
+topGeo.setAttribute('position', new THREE.BufferAttribute(topPos, 3));
+topGeo.setAttribute('normal', new THREE.BufferAttribute(topNor, 3));
+topGeo.setIndex(gridIndex);
+topGeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 1.5, 0), 9);
+const waterMat = new THREE.MeshPhysicalMaterial({
+  color: 0x2a78ee, roughness: 0.1, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.08,
+  envMap: envTex, envMapIntensity: 1.1, transparent: true, opacity: 0.74, side: THREE.DoubleSide, depthWrite: false
+});
+const topMesh = new THREE.Mesh(topGeo, waterMat); topMesh.frustumCulled = false; topMesh.renderOrder = 3; jelly.add(topMesh);
+
+// 周长一圈的网格点（前→右→后→左），四壁和顶沿轮廓线共用
+const perim = [];
+for (let i = 0; i < NX; i++) perim.push([i, NZ - 1, 0, 1]);
+for (let j = NZ - 1; j >= 0; j--) perim.push([NX - 1, j, 1, 0]);
+for (let i = NX - 1; i >= 0; i--) perim.push([i, 0, 0, -1]);
+for (let j = 0; j < NZ; j++) perim.push([0, j, -1, 0]);
+const PN = perim.length;
+const sidePos = new Float32Array(PN * 6), sideNor = new Float32Array(PN * 6), sideIdx = [];
+perim.forEach(([i, j, nx, nz], n) => {
+  const o = n * 6;
+  sidePos[o] = sidePos[o + 3] = gx(i); sidePos[o + 2] = sidePos[o + 5] = gz(j);
+  sideNor[o] = sideNor[o + 3] = nx; sideNor[o + 2] = sideNor[o + 5] = nz;
+  if (n < PN - 1 && (perim[n + 1][2] === nx && perim[n + 1][3] === nz)) { const a = n * 2; sideIdx.push(a, a + 1, a + 2, a + 2, a + 1, a + 3); }
+});
+const sideGeo = new THREE.BufferGeometry();
+sideGeo.setAttribute('position', new THREE.BufferAttribute(sidePos, 3));
+sideGeo.setAttribute('normal', new THREE.BufferAttribute(sideNor, 3));
+sideGeo.setIndex(sideIdx);
+sideGeo.boundingSphere = topGeo.boundingSphere;
+const sideMat = new THREE.MeshPhysicalMaterial({
+  color: 0x2a78ee, roughness: 0.15, clearcoat: 1, envMap: envTex, envMapIntensity: 0.7,
+  transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false
+});
+const sideMesh = new THREE.Mesh(sideGeo, sideMat); sideMesh.frustumCulled = false; sideMesh.renderOrder = 2; jelly.add(sideMesh);
+
+const rimPos = new Float32Array(PN * 3);
+const rimGeo = new THREE.BufferGeometry(); rimGeo.setAttribute('position', new THREE.BufferAttribute(rimPos, 3));
+const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false });
+const rim = new THREE.LineLoop(rimGeo, lineMat); rim.frustumCulled = false; rim.renderOrder = 4; jelly.add(rim);
+const cornerPos = new Float32Array(24);
+const cornerGeo = new THREE.BufferGeometry(); cornerGeo.setAttribute('position', new THREE.BufferAttribute(cornerPos, 3));
+const corners = new THREE.LineSegments(cornerGeo, lineMat); corners.frustumCulled = false; corners.renderOrder = 4; jelly.add(corners);
+const CORNERS = [[0, 0], [NX - 1, 0], [NX - 1, NZ - 1], [0, NZ - 1]];
+
+// 海床：顶点色做焦散（水面曲率 → 亮度）
+const bedGeo = new THREE.BufferGeometry();
+const bedPos = new Float32Array(N * 3), bedCol = new Float32Array(N * 3), bedNor = new Float32Array(N * 3);
+for (let k = 0; k < N; k++) { bedPos[k * 3] = topPos[k * 3]; bedPos[k * 3 + 1] = 0.012; bedPos[k * 3 + 2] = topPos[k * 3 + 2]; bedNor[k * 3 + 1] = 1; }
+bedGeo.setAttribute('position', new THREE.BufferAttribute(bedPos, 3));
+bedGeo.setAttribute('normal', new THREE.BufferAttribute(bedNor, 3));
+bedGeo.setAttribute('color', new THREE.BufferAttribute(bedCol, 3));
+bedGeo.setIndex(gridIndex);
+const bed = new THREE.Mesh(bedGeo, new THREE.MeshLambertMaterial({ vertexColors: true }));
+bed.receiveShadow = true; jelly.add(bed);
+
+function updateWaterMesh(time) {
+  const L = P.level, inv = 1 / (2 * CS);
+  for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) {
+    const k = i + j * NX, o = k * 3, c = h[k];
+    const l = i > 0 ? h[k - 1] : c, r = i < NX - 1 ? h[k + 1] : c, u = j > 0 ? h[k - NX] : c, d = j < NZ - 1 ? h[k + NX] : c;
+    topPos[o + 1] = L + c;
+    const nx = -(r - l) * inv, nz = -(d - u) * inv, il = 1 / Math.sqrt(nx * nx + 1 + nz * nz);
+    topNor[o] = nx * il; topNor[o + 1] = il; topNor[o + 2] = nz * il;
+    // 焦散：水面下凹处聚光变亮，再叠一层缓慢流动的纹理
+    const x = topPos[o], z = topPos[o + 2];
+    const lap = l + r + u + d - 4 * c;
+    const flow = Math.sin(x * 2.3 + time * 0.8 + Math.sin(z * 1.7 + time * 0.5) * 1.6) * Math.sin(z * 2.9 - time * 0.6 + Math.sin(x * 1.3) * 1.4);
+    let b = 1 + lap * 30 + flow * 0.07; b = b < 0.55 ? 0.55 : b > 2.2 ? 2.2 : b;
+    bedCol[o] = 0.035 * b; bedCol[o + 1] = 0.17 * b; bedCol[o + 2] = 0.62 * b;
+  }
+  for (let n = 0; n < PN; n++) {
+    const p = perim[n], y = L + h[p[0] + p[1] * NX];
+    sidePos[n * 6 + 1] = y;
+    rimPos[n * 3] = gx(p[0]); rimPos[n * 3 + 1] = y + 0.004; rimPos[n * 3 + 2] = gz(p[1]);
+  }
+  CORNERS.forEach(([i, j], n) => {
+    const o = n * 6; cornerPos[o] = cornerPos[o + 3] = gx(i); cornerPos[o + 2] = cornerPos[o + 5] = gz(j);
+    cornerPos[o + 1] = 0; cornerPos[o + 4] = L + h[i + j * NX];
+  });
+  topGeo.attributes.position.needsUpdate = topGeo.attributes.normal.needsUpdate = true;
+  sideGeo.attributes.position.needsUpdate = rimGeo.attributes.position.needsUpdate = cornerGeo.attributes.position.needsUpdate = true;
+  bedGeo.attributes.color.needsUpdate = true;
+}
+
+/* ───────────── 小工具 ───────────── */
+let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647, (seed & 0xffff) / 0xffff);
+function roughen(geo, amt, yAmt = 0) {  // 低面数“手捏”感：把顶点沿径向抖一抖
+  const p = geo.attributes.position, m = new Map();
+  for (let i = 0; i < p.count; i++) {
+    const key = p.getX(i).toFixed(3) + ',' + p.getY(i).toFixed(3) + ',' + p.getZ(i).toFixed(3);
+    if (!m.has(key)) m.set(key, [1 + (rnd() - 0.5) * amt, (rnd() - 0.5) * yAmt]);
+    const [s, dy] = m.get(key);
+    p.setXYZ(i, p.getX(i) * s, p.getY(i) + dy, p.getZ(i) * s);
+  }
+  geo.computeVertexNormals(); return geo;
+}
+const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, flatShading: true, ...o });
+const shadow = m => (m.traverse(o => { if (o.isMesh) o.castShadow = o.receiveShadow = true; }), m);
+
+/* ───────────── 小岛：礁石 + 雪顶 + 冰屋 + 旗 + 梯子 ───────────── */
+const island = new THREE.Group(); island.position.set(ISLE.x, 0, ISLE.z); jelly.add(island);
+const ROCK_H = 2.85;
+{
+  const rock = new THREE.Mesh(roughen(new THREE.CylinderGeometry(1.18, 1.8, ROCK_H, 11, 4), 0.22, 0.1), std(0x3a465e));
+  rock.position.y = ROCK_H / 2; island.add(rock);
+  const cap = new THREE.Mesh(roughen(new THREE.CylinderGeometry(1.25, 1.3, 0.26, 11, 1), 0.12), std(0xf6f9ff));
+  cap.position.y = ROCK_H + 0.08; island.add(cap);
+  const dome = new THREE.Mesh(roughen(new THREE.SphereGeometry(1.22, 11, 4, 0, Math.PI * 2, 0, Math.PI / 2), 0.08), std(0xffffff));
+  dome.scale.y = 0.22; dome.position.y = ROCK_H + 0.2; island.add(dome);
+  // 雪檐滴下的冰凌
+  for (let i = 0; i < 9; i++) {
+    const a = i / 9 * Math.PI * 2 + 0.3, len = 0.25 + rnd() * 0.5;
+    const ic = new THREE.Mesh(new THREE.ConeGeometry(0.07, len, 5), std(0xeaf3ff));
+    ic.rotation.x = Math.PI; ic.position.set(Math.cos(a) * 1.2, ROCK_H - len / 2, Math.sin(a) * 1.2); island.add(ic);
+  }
+  // 冰屋
+  const igloo = new THREE.Group(); igloo.position.set(-0.15, ROCK_H + 0.36, -0.1); island.add(igloo);
+  const shell = new THREE.Mesh(new THREE.SphereGeometry(0.58, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), std(0xf2f6fd, { roughness: 0.9 }));
+  igloo.add(shell);
+  const blocks = new THREE.LineSegments(new THREE.EdgesGeometry(shell.geometry, 1), new THREE.LineBasicMaterial({ color: 0xb9c6dc }));
+  blocks.scale.setScalar(1.003); igloo.add(blocks);
+  const tunnel = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), std(0xf2f6fd));
+  tunnel.scale.set(1, 1.05, 1.5); tunnel.position.set(0.28, 0, 0.5); tunnel.rotation.y = 0.5; igloo.add(tunnel);
+  const door = new THREE.Mesh(new THREE.CircleGeometry(0.15, 12, 0, Math.PI), new THREE.MeshBasicMaterial({ color: 0x262c3a }));
+  door.position.set(0.45, 0, 0.82); door.rotation.y = 0.5; igloo.add(door);
+  island.userData.door = door;
+  iglooLight.position.set(0.6, ROCK_H + 0.7, 1.0); island.add(iglooLight);
+  // 旗
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 1.0, 6), std(0x8a6a4a));
+  pole.position.set(0.62, ROCK_H + 0.75, -0.42); island.add(pole);
+  const flagGeo = new THREE.PlaneGeometry(0.44, 0.26, 10, 1); flagGeo.translate(0.22, 0, 0);
+  const flag = new THREE.Mesh(flagGeo, new THREE.MeshStandardMaterial({ color: 0xe9432b, side: THREE.DoubleSide, roughness: 0.7 }));
+  flag.position.set(0.63, ROCK_H + 1.1, -0.42); island.add(flag); island.userData.flag = flag;
+  // 梯子
+  const ladder = new THREE.Group(), wood = std(0xc98b4c);
+  for (const sx of [-0.13, 0.13]) { const r = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.5, 0.04), wood); r.position.set(sx, 0, 0); ladder.add(r); }
+  for (let i = 0; i < 7; i++) { const r = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.035, 0.05), wood); r.position.y = -0.62 + i * 0.2; ladder.add(r); }
+  ladder.position.set(0.75, ROCK_H - 0.55, 1.22); ladder.rotation.set(-0.2, 0.55, 0); island.add(ladder);
+  shadow(island);
+}
+// 海床上的暗礁
+for (const [x, z, s] of [[-4.9, 2.9, 0.42], [4.6, 3.1, 0.36], [5.0, -2.6, 0.3], [0.4, 3.2, 0.25], [-4.6, -3.0, 0.33], [2.6, -3.2, 0.3]]) {
+  const m = new THREE.Mesh(roughen(new THREE.SphereGeometry(s, 8, 5), 0.3), std(0x0d2a66));
+  m.scale.y = 0.45; m.position.set(x, 0.05, z); m.castShadow = true; jelly.add(m);
+}
+
+/* ───────────── 浮冰 + 皮划艇：跟着高度场起伏、被波面坡度推着走 ───────────── */
+const floats = [];
+const UP = new THREE.Vector3(0, 1, 0), _n = new THREE.Vector3(), _q = new THREE.Quaternion(), _qy = new THREE.Quaternion();
+const FLOE_HOME = [[-4.8, -2.6, .5], [-3.9, 0.9, .42], [-4.6, 2.5, .34], [-1.6, 1.9, .36], [-0.2, 3.0, .3], [0.6, -0.4, .44], [1.2, -3.0, .5],
+  [2.6, 1.6, .3], [3.6, -1.6, .46], [4.9, 0.8, .36], [4.4, 2.9, .42], [2.2, -2.2, .26], [-0.5, -3.3, .32], [5.2, -3.1, .3]];
+for (const [x, z, r] of FLOE_HOME) {
+  const mesh = new THREE.Mesh(roughen(new THREE.CylinderGeometry(r, r * 0.8, 0.24, 7, 1), 0.38, 0.05), std(0xf8fbff, { roughness: 0.6 }));
+  mesh.castShadow = true; jelly.add(mesh);
+  floats.push({ mesh, x, z, hx: x, hz: z, vx: 0, vz: 0, r, yaw: rnd() * 6, vyaw: 0, lift: 0.04, y: P.level });
+}
+const kayakMesh = new THREE.Group();
+{
+  const hull = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 8), new THREE.MeshStandardMaterial({ color: 0xf2762a, roughness: 0.45 }));
+  hull.scale.set(0.52, 0.085, 0.13); kayakMesh.add(hull);
+  const pit = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.03, 12), std(0x2a2f3a)); pit.position.y = 0.08; pit.scale.x = 1.5; kayakMesh.add(pit);
+  shadow(kayakMesh); jelly.add(kayakMesh);
+}
+const kayak = { mesh: kayakMesh, x: 0.2, z: 1.2, hx: 0.2, hz: 1.2, vx: 0, vz: 0, r: 0.34, yaw: 0.5, vyaw: 0, lift: 0.03, y: P.level, isKayak: true, tow: null };
+floats.push(kayak);
+
+function updateFloats(dt) {
+  for (const f of floats) {
+    const g = sampleGrad(f.x, f.z);
+    f.vx -= g[0] * 9 * dt; f.vz -= g[1] * 9 * dt;        // 沿波面“下坡”滑
+    f.vx += J.ax * -0.02 * dt; f.vz += J.az * -0.02 * dt;  // 果冻晃动时的惯性
+    if (!f.isKayak) { f.vx += (f.hx - f.x) * 0.25 * dt; f.vz += (f.hz - f.z) * 0.25 * dt; }   // 浮冰缓慢漂回原位，保持构图
+    if (f.tow) {
+      const dx = f.tow.x - f.x, dz = f.tow.z - f.z;
+      f.vx += dx * 22 * dt; f.vz += dz * 22 * dt; f.vx *= 0.9; f.vz *= 0.9;
+    }
+    const drag = Math.exp(-dt * 1.3); f.vx *= drag; f.vz *= drag;
+    f.x += f.vx * dt; f.z += f.vz * dt;
+    const sp = Math.hypot(f.vx, f.vz);
+    if (f.isKayak && sp > 0.15) {                         // 船头朝运动方向，并留下尾迹
+      let dy = Math.atan2(-f.vz, f.vx) - f.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+      if (Math.abs(dy) > Math.PI / 2) dy -= Math.sign(dy) * Math.PI;
+      f.yaw += dy * Math.min(1, dt * 5);
+      addDrop(f.x, f.z, 0.22, -0.012 * Math.min(sp, 4));
+    } else { f.yaw += f.vyaw * dt; f.vyaw *= 0.98; }
+    // 玻璃壁
+    const mx = W / 2 - f.r, mz = D / 2 - f.r;
+    if (f.x > mx) { f.x = mx; f.vx *= -0.5; } if (f.x < -mx) { f.x = -mx; f.vx *= -0.5; }
+    if (f.z > mz) { f.z = mz; f.vz *= -0.5; } if (f.z < -mz) { f.z = -mz; f.vz *= -0.5; }
+    // 小岛
+    const dx = f.x - ISLE.x, dz = f.z - ISLE.z, d = Math.hypot(dx, dz), min = ISLE.r + f.r + 0.05;
+    if (d < min) { const nx = dx / d, nz = dz / d; f.x = ISLE.x + nx * min; f.z = ISLE.z + nz * min; const vn = f.vx * nx + f.vz * nz; if (vn < 0) { f.vx -= 1.5 * vn * nx; f.vz -= 1.5 * vn * nz; } }
+  }
+  for (let a = 0; a < floats.length; a++) for (let b = a + 1; b < floats.length; b++) {   // 互相推开
+    const A = floats[a], B = floats[b], dx = B.x - A.x, dz = B.z - A.z, d = Math.hypot(dx, dz) || 1e-3, min = A.r + B.r;
+    if (d < min) {
+      const nx = dx / d, nz = dz / d, push = (min - d) / 2;
+      A.x -= nx * push; A.z -= nz * push; B.x += nx * push; B.z += nz * push;
+      const rv = (B.vx - A.vx) * nx + (B.vz - A.vz) * nz;
+      if (rv < 0) { A.vx += rv * nx * 0.6; A.vz += rv * nz * 0.6; B.vx -= rv * nx * 0.6; B.vz -= rv * nz * 0.6; A.vyaw += rv * 0.4; B.vyaw -= rv * 0.4; }
+    }
+  }
+  for (const f of floats) {
+    const g = sampleGrad(f.x, f.z), ty = P.level + sampleH(f.x, f.z) + f.lift;
+    f.y += (ty - f.y) * Math.min(1, dt * 18);
+    f.mesh.position.set(f.x, f.y, f.z);
+    _n.set(-g[0], 1, -g[1]).normalize();
+    _q.setFromUnitVectors(UP, _n); _qy.setFromAxisAngle(UP, f.yaw);
+    f.mesh.quaternion.copy(_q).multiply(_qy);
+  }
+}
+
+/* ───────────── 鲸鱼 ───────────── */
+const whale = new THREE.Group(); jelly.add(whale);
+const whaleTail = new THREE.Group();
+{
+  const L = 2.5, pts = [];
+  for (let i = 0; i <= 18; i++) { const t = i / 18; pts.push(new THREE.Vector2(0.4 * Math.pow(Math.sin(Math.PI * Math.pow(t, 0.62)), 0.75) + 0.001, (0.5 - t) * L)); }
+  const bodyGeo = new THREE.LatheGeometry(pts, 14); bodyGeo.rotateZ(-Math.PI / 2); bodyGeo.scale(1, 0.85, 1);
+  const mat = new THREE.MeshStandardMaterial({ color: 0x16254d, roughness: 0.5 });
+  whale.add(new THREE.Mesh(bodyGeo, mat));
+  const belly = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), new THREE.MeshStandardMaterial({ color: 0x8fa3c8, roughness: 0.6 }));
+  belly.scale.set(0.75, 0.2, 0.27); belly.position.set(0.35, -0.17, 0); whale.add(belly);
+  const finGeo = new THREE.SphereGeometry(1, 10, 6);
+  for (const s of [-1, 1]) {
+    const fin = new THREE.Mesh(finGeo, mat); fin.scale.set(0.3, 0.035, 0.13); fin.position.set(0.3, -0.12, s * 0.42); fin.rotation.set(s * 0.35, -s * 0.7, 0); whale.add(fin);
+    const fluke = new THREE.Mesh(finGeo, mat); fluke.scale.set(0.3, 0.035, 0.15); fluke.position.set(-0.2, 0, s * 0.2); fluke.rotation.y = s * 0.75; whaleTail.add(fluke);
+  }
+  whaleTail.position.set(-L / 2 + 0.12, 0, 0); whale.add(whaleTail);
+  whale.rotation.order = 'YZX'; shadow(whale);
+}
+const WS = { th: 2.4, y: 0.9, mode: 'cruise', t: 0, above: false, speed: 0.28 };
+function callWhale() { if (WS.mode === 'cruise') { WS.mode = 'breach'; WS.t = 0; } }
+function updateWhale(dt, time) {
+  const breaching = WS.mode === 'breach';
+  const base = Math.min(P.level * 0.42, P.level - 0.7) + Math.sin(time * 0.7) * 0.08;
+  let y = base, pitch = Math.sin(time * 0.7 + 1.5) * 0.05, spd = WS.speed;
+  if (breaching) {
+    WS.t += dt / 2.6; const tt = Math.min(WS.t, 1), s = Math.sin(Math.PI * tt);
+    const peak = P.level + 0.95; y = base + (peak - base) * s; spd = WS.speed * (1 + 2.2 * s);
+    pitch = Math.cos(Math.PI * tt) * 0.95 * Math.min(1, s * 3 + 0.2);
+    if (WS.t >= 1) WS.mode = 'cruise';
+  }
+  WS.th += spd * dt;
+  const x = WH.cx + WH.rx * Math.cos(WS.th), z = WH.cz + WH.rz * Math.sin(WS.th);
+  const dx = -WH.rx * Math.sin(WS.th), dz = WH.rz * Math.cos(WS.th);
+  whale.position.set(x, y, z); whale.rotation.set(0, Math.atan2(-dz, dx), pitch);
+  whaleTail.rotation.z = Math.sin(time * (breaching ? 9 : 3.2)) * (breaching ? 0.5 : 0.3);
+  const above = y + 0.25 > P.level;
+  if (above !== WS.above) {
+    WS.above = above;
+    if (above) { addDrop(x, z, 0.7, 0.42); spray(x, z, 50, 3.2); J.vq += 0.5; }
+    else { addDrop(x, z, 1.0, -0.6); addDrop(x, z, 1.9, 0.16); spray(x, z, 130, 4.6); J.vq -= 1.6; J.vx += dx * 0.25; J.vz += dz * 0.25; }
+  }
+  if (!above && P.level - y < 0.75) addDrop(x, z, 0.55, 0.012);   // 贴近水面时顶起一道水包
+  WS.y = y;
+}
+
+/* ───────────── 粒子：水花 + 雪 ───────────── */
+const dotTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 32; const g = c.getContext('2d');
+  const gr = g.createRadialGradient(16, 16, 0, 16, 16, 16); gr.addColorStop(0, '#fff'); gr.addColorStop(0.5, 'rgba(255,255,255,.7)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 32, 32); return new THREE.CanvasTexture(c);
+})();
+const SPN = 260, spPos = new Float32Array(SPN * 3).fill(-99), spVel = new Float32Array(SPN * 3), spLive = new Uint8Array(SPN); let spNext = 0;
+const spGeo = new THREE.BufferGeometry(); spGeo.setAttribute('position', new THREE.BufferAttribute(spPos, 3));
+const sprayPts = new THREE.Points(spGeo, new THREE.PointsMaterial({ map: dotTex, color: 0xffffff, size: 0.14, transparent: true, depthWrite: false }));
+sprayPts.frustumCulled = false; sprayPts.renderOrder = 5; jelly.add(sprayPts);
+function spray(x, z, n, power) {
+  for (let i = 0; i < n; i++) {
+    const k = spNext = (spNext + 1) % SPN, a = Math.random() * 6.283, r = Math.random();
+    spPos[k * 3] = x + Math.cos(a) * r * 0.5; spPos[k * 3 + 1] = P.level + 0.05; spPos[k * 3 + 2] = z + Math.sin(a) * r * 0.5;
+    spVel[k * 3] = Math.cos(a) * r * power * 0.45; spVel[k * 3 + 1] = power * (0.5 + Math.random() * 0.7); spVel[k * 3 + 2] = Math.sin(a) * r * power * 0.45;
+    spLive[k] = 1;
+  }
+}
+function updateSpray(dt) {
+  for (let k = 0; k < SPN; k++) {
+    if (!spLive[k]) continue; const o = k * 3;
+    spVel[o + 1] -= 9.8 * dt; spPos[o] += spVel[o] * dt; spPos[o + 1] += spVel[o + 1] * dt; spPos[o + 2] += spVel[o + 2] * dt;
+    if (spPos[o + 1] < P.level && spVel[o + 1] < 0) {
+      if (Math.abs(spPos[o]) < W / 2 && Math.abs(spPos[o + 2]) < D / 2) addDrop(spPos[o], spPos[o + 2], 0.14, -0.02);
+      spLive[k] = 0; spPos[o + 1] = -99;
+    }
+  }
+  spGeo.attributes.position.needsUpdate = true;
+}
+const SNN = 1400, snPos = new Float32Array(SNN * 3), snSeed = new Float32Array(SNN);
+for (let k = 0; k < SNN; k++) { snPos[k * 3] = (Math.random() - 0.5) * 30; snPos[k * 3 + 1] = Math.random() * 16 - 1; snPos[k * 3 + 2] = (Math.random() - 0.5) * 26; snSeed[k] = Math.random() * 6.28; }
+const snGeo = new THREE.BufferGeometry(); snGeo.setAttribute('position', new THREE.BufferAttribute(snPos, 3));
+const snowMat = new THREE.PointsMaterial({ map: dotTex, color: 0xffffff, size: 0.16, transparent: true, opacity: 0, depthWrite: false });
+const snow = new THREE.Points(snGeo, snowMat); snow.frustumCulled = false; snow.renderOrder = 6; scene.add(snow);
+function updateSnow(dt, time) {
+  if (snowMat.opacity < 0.01) { snow.visible = false; return; } snow.visible = true;
+  for (let k = 0; k < SNN; k++) {
+    const o = k * 3; snPos[o + 1] -= (1.1 + (snSeed[k] % 1) * 0.9) * dt;
+    snPos[o] += Math.sin(time * 0.8 + snSeed[k]) * 0.35 * dt + 0.25 * dt;
+    if (snPos[o] > 15) snPos[o] -= 30;
+    if (snPos[o + 1] < -0.8) snPos[o + 1] = 15;
+  }
+  snGeo.attributes.position.needsUpdate = true;
+}
+
+/* ───────────── 天气预设（数值之间平滑过渡） ───────────── */
+const WEATHER = {
+  day:    { cA: 0xeef0f4, cB: 0xb7bdca, hemi: 1.5, sun: 2.6, sunC: 0xffffff, aur: 0, snow: 0, env: 1.1, glow: 0, shadow: 0.2 },
+  snow:   { cA: 0xe2e7ee, cB: 0x9fa9bb, hemi: 1.7, sun: 1.3, sunC: 0xeaf1ff, aur: 0, snow: 0.95, env: 0.9, glow: 0, shadow: 0.12 },
+  aurora: { cA: 0x14254d, cB: 0x040817, hemi: 0.4, sun: 0.75, sunC: 0x9fc4ff, aur: 1, snow: 0, env: 0.45, glow: 1, shadow: 0.35 }
+};
+const wx = { hemi: 1.5, sun: 2.6, aur: 0, snow: 0, env: 1.1, glow: 0, shadow: 0.2 };
+const _c = new THREE.Color(), doorDark = new THREE.Color(0x262c3a), doorWarm = new THREE.Color(0xffb14d);
+function updateWeather(dt) {
+  const T = WEATHER[P.weather], k = 1 - Math.exp(-dt * 2.5);
+  for (const key in wx) wx[key] += (T[key] - wx[key]) * k;
+  bgMat.uniforms.cA.value.lerp(_c.set(T.cA), k); bgMat.uniforms.cB.value.lerp(_c.set(T.cB), k);
+  sun.color.lerp(_c.set(T.sunC), k);
+  hemi.intensity = wx.hemi; sun.intensity = wx.sun; bgMat.uniforms.uAur.value = wx.aur;
+  snowMat.opacity = wx.snow; waterMat.envMapIntensity = wx.env; sideMat.envMapIntensity = wx.env * 0.65;
+  ground.material.opacity = wx.shadow; iglooLight.intensity = wx.glow * 14;
+  island.userData.door.material.color.copy(doorDark).lerp(doorWarm, wx.glow);
+}
+
+/* ───────────── 果冻的弹簧-阻尼形变 ───────────── */
+function updateJelly(dt) {
+  const k = 260 - P.soft * 225, c = 2 * 0.11 * Math.sqrt(k);
+  if (J.held) {                               // 被抓住时追随手的位置
+    const f = Math.min(1, dt * 14); const nx = J.sx + (J.tx - J.sx) * f, nz = J.sz + (J.tz - J.sz) * f;
+    J.vx = (nx - J.sx) / dt; J.vz = (nz - J.sz) / dt; J.ax = J.az = 0; J.sx = nx; J.sz = nz;
+  } else {
+    J.ax = -k * J.sx - c * J.vx; J.az = -k * J.sz - c * J.vz;
+    J.vx += J.ax * dt; J.vz += J.az * dt; J.sx += J.vx * dt; J.sz += J.vz * dt;
+  }
+  J.vq += (-k * 1.6 * J.q - c * 1.3 * J.vq) * dt; J.q += J.vq * dt;
+  J.q = Math.max(-0.25, Math.min(0.25, J.q));
+  const sy = 1 + J.q, sxz = 1 / Math.sqrt(sy);    // 压扁时向四周鼓出，近似体积守恒
+  jelly.matrix.set(sxz, J.sx, 0, 0, 0, sy, 0, 0, 0, J.sz, sxz, 0, 0, 0, 0, 1);
+  jelly.matrixWorldNeedsUpdate = true;
+  // 果冻加速时水跟着晃：给水面速度加一个与位置成正比的倾斜
+  if (!J.held && (Math.abs(J.ax) + Math.abs(J.az)) > 0.5) {
+    const kx = J.ax * 1.2e-5, kz = J.az * 1.2e-5;
+    for (let j = 0; j < NZ; j++) { const z = gz(j) * kz; for (let i = 0; i < NX; i++) { const n = i + j * NX; if (!mask[n]) v[n] += gx(i) * kx + z; } }
+  }
+}
+
+/* ───────────── 交互 ───────────── */
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), _p = new THREE.Vector3(), _r = new THREE.Vector3(), _f = new THREE.Vector3();
+const drag = { mode: null, x: 0, y: 0, sx: 0, sy: 0, last: null, moved: 0, wall: null, hit: null };
+function pick(e) {
+  ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
+  const hit = ray.intersectObjects([topMesh, sideMesh], false)[0]; if (!hit) return null;
+  return { obj: hit.object, p: jelly.worldToLocal(hit.point.clone()) };
+}
+function planePoint(e) {   // 鼠标射线与水平面的交点（拖船时即使移出水面也能用）
+  ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
+  const o = ray.ray.origin, d = ray.ray.direction, t = (P.level - o.y) / d.y; if (!(t > 0)) return null;
+  return { x: Math.max(-W / 2 + 0.3, Math.min(W / 2 - 0.3, o.x + d.x * t - J.sx * P.level)), z: Math.max(-D / 2 + 0.3, Math.min(D / 2 - 0.3, o.z + d.z * t - J.sz * P.level)) };
+}
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('pointerdown', e => {
+  canvas.setPointerCapture(e.pointerId); canvas.classList.add('busy');
+  drag.x = drag.sx = e.clientX; drag.y = drag.sy = e.clientY; drag.moved = 0;
+  const hit = e.button === 0 ? pick(e) : null;
+  if (!hit) { drag.mode = 'orbit'; return; }
+  if (hit.obj === topMesh) {
+    if (Math.hypot(hit.p.x - kayak.x, hit.p.z - kayak.z) < 0.7) { drag.mode = 'tow'; kayak.tow = { x: hit.p.x, z: hit.p.z }; }
+    else { drag.mode = 'ripple'; drag.last = hit.p; addDrop(hit.p.x, hit.p.z, 0.36, -0.3); J.vq -= 0.3; }
+  } else {
+    drag.mode = 'jelly'; drag.hit = hit.p; J.held = true; J.tx = J.sx; J.tz = J.sz;
+    drag.wall = Math.abs(Math.abs(hit.p.x) - W / 2) < Math.abs(Math.abs(hit.p.z) - D / 2) ? [Math.sign(hit.p.x), 0] : [0, Math.sign(hit.p.z)];
+  }
+});
+canvas.addEventListener('pointermove', e => {
+  if (!drag.mode) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY; drag.moved += Math.abs(dx) + Math.abs(dy);
+  if (drag.mode === 'orbit') {
+    cam.taz -= dx * 0.006; cam.tpol = Math.max(0.25, Math.min(1.5, cam.tpol - dy * 0.005));
+  } else if (drag.mode === 'ripple') {
+    const hit = pick(e); if (!hit || hit.obj !== topMesh) { drag.last = null; return; }
+    if (drag.last) {
+      const d = Math.hypot(hit.p.x - drag.last.x, hit.p.z - drag.last.z), n = Math.max(1, Math.ceil(d / 0.15));
+      for (let i = 1; i <= n; i++) addDrop(drag.last.x + (hit.p.x - drag.last.x) * i / n, drag.last.z + (hit.p.z - drag.last.z) * i / n, 0.26, -0.05 - Math.min(0.06, d * 0.05));
+    }
+    drag.last = hit.p;
+  } else if (drag.mode === 'tow') {
+    const p = planePoint(e); if (p) kayak.tow = p;
+  } else if (drag.mode === 'jelly') {
+    // 屏幕位移 → 世界水平位移 → 剪切量
+    _r.setFromMatrixColumn(camera.matrixWorld, 0); _f.set(-Math.sin(cam.az), 0, -Math.cos(cam.az));
+    const s = cam.dist * 0.00075, mx = e.clientX - drag.sx, my = e.clientY - drag.sy;
+    let tx = (_r.x * mx - _f.x * my) * s / P.level * 1.4, tz = (_r.z * mx - _f.z * my) * s / P.level * 1.4;
+    const m = Math.hypot(tx, tz), lim = 0.32; if (m > lim) { tx *= lim / m; tz *= lim / m; }
+    J.tx = tx; J.tz = tz;
+  }
+});
+function endDrag() {
+  if (drag.mode === 'jelly') {
+    J.held = false;
+    if (drag.moved < 6) {    // 没拖动 = 敲了一下玻璃：果冻一颤，水从这面壁荡出去
+      const [nx, nz] = drag.wall; J.vx -= nx * 2.6; J.vz -= nz * 2.6; J.vq += 0.35;
+      const hx = Math.max(-W / 2 + 0.2, Math.min(W / 2 - 0.2, drag.hit.x - nx * 0.25)), hz = Math.max(-D / 2 + 0.2, Math.min(D / 2 - 0.2, drag.hit.z - nz * 0.25));
+      for (let i = -3; i <= 3; i++) addDrop(hx + nz * i * 0.3, hz + nx * i * 0.3, 0.3, 0.09 * (1 - Math.abs(i) / 4));
+    }
+  }
+  kayak.tow = null; drag.mode = null; canvas.classList.remove('busy');
+}
+canvas.addEventListener('pointerup', endDrag); canvas.addEventListener('pointercancel', endDrag);
+canvas.addEventListener('wheel', e => { e.preventDefault(); cam.tdist = Math.max(14, Math.min(48, cam.tdist * (1 + e.deltaY * 0.001))); }, { passive: false });
+
+/* ───────────── 面板 ───────────── */
+const $ = id => document.getElementById(id);
+function setWeather(w) {
+  P.weather = w; document.body.classList.toggle('night', w === 'aurora');
+  document.querySelectorAll('#weather button').forEach(b => b.classList.toggle('on', b.dataset.w === w));
+}
+document.querySelectorAll('#weather button').forEach(b => b.onclick = () => setWeather(b.dataset.w));
+function syncSliders() {
+  P.soft = +$('sJelly').value; P.damp = +$('sDamp').value; P.level = +$('sTide').value;
+  $('oJelly').textContent = P.soft < 0.34 ? '偏硬' : P.soft < 0.67 ? '适中' : '软糯';
+  $('oDamp').textContent = P.damp.toFixed(2); $('oTide').textContent = (P.level * 10).toFixed(0) + ' mm';
+}
+['sJelly', 'sDamp', 'sTide'].forEach(id => $(id).oninput = syncSliders); syncSliders();
+$('bWhale').onclick = callWhale;
+$('bPause').onclick = () => { P.paused = !P.paused; $('bPause').textContent = P.paused ? '继续' : '暂停'; };
+$('bCam').onclick = () => { camPreset = (camPreset + 1) % CAM_PRESETS.length; [cam.taz, cam.tpol, cam.tdist] = CAM_PRESETS[camPreset]; cam.az = Math.atan2(Math.sin(cam.az), Math.cos(cam.az)); };
+$('bReset').onclick = () => {
+  h.fill(0); v.fill(0); Object.assign(J, { sx: 0, sz: 0, vx: 0, vz: 0, q: 0, vq: 0, held: false });
+  for (const f of floats) { f.x = f.hx; f.z = f.hz; f.vx = f.vz = f.vyaw = 0; }
+  $('sJelly').value = 0.5; $('sDamp').value = 0.3; $('sTide').value = 2.1; syncSliders();
+  WS.mode = 'cruise'; camPreset = 0;[cam.taz, cam.tpol, cam.tdist] = CAM_PRESETS[0]; setWeather('day');
+};
+
+/* ───────────── 主循环 ───────────── */
+const clock = new THREE.Clock(); let simTime = 0, acc = 0, statT = 0, dripT = 0;
+const STEP = 1 / 60;
+function frame() {
+  requestAnimationFrame(frame);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  updateCamera(dt); updateWeather(dt);
+  if (!P.paused) {
+    acc += dt;
+    while (acc >= STEP) {
+      acc -= STEP; simTime += STEP;
+      const damp = 0.9993 - P.damp * 0.02;
+      updateJelly(STEP);
+      stepWaves(damp); stepWaves(damp);
+      updateWhale(STEP, simTime); updateFloats(STEP); updateSpray(STEP);
+      // 环境扰动：平时偶尔一滴，下雪时雪片不断落进水里
+      dripT -= STEP;
+      if (dripT < 0) {
+        dripT = wx.snow > 0.5 ? 0.04 : 0.5 + Math.random();
+        addDrop((Math.random() - 0.5) * (W - 1), (Math.random() - 0.5) * (D - 1), wx.snow > 0.5 ? 0.12 : 0.3, wx.snow > 0.5 ? -0.012 : -0.035);
+      }
+    }
+    updateSnow(dt, simTime);
+    const fp = island.userData.flag.geometry.attributes.position;
+    for (let i = 0; i < fp.count; i++) { const x = fp.getX(i); fp.setZ(i, Math.sin(x * 14 - simTime * 7) * 0.05 * x / 0.44); }
+    fp.needsUpdate = true;
+  }
+  updateWaterMesh(simTime);
+  bgMat.uniforms.uTime.value = simTime; bgMat.uniforms.uAspect.value = camera.aspect;
+  renderer.render(scene, camera);
+
+  statT -= dt;
+  if (statT < 0) {
+    statT = 0.2; let m = 0; for (let k = 0; k < N; k += 7) { const a = Math.abs(h[k]); if (a > m) m = a; }
+    $('stSwell').textContent = Math.round(m * 100) + ' mm';
+    $('stKayak').textContent = kayak.tow ? '拖行中' : Math.hypot(kayak.vx, kayak.vz) > 0.25 ? '滑行' : '漂流';
+    $('stWhale').textContent = WS.mode === 'breach' ? '跃出水面' : '巡游';
+  }
+}
+window.__jelly = { addDrop, callWhale, setWeather, J, P, WS, kayak, h };
+frame();
+</script>
+</body>
+</html>
